@@ -108,3 +108,6 @@ fastai
 
 # IDE
 .idea
+
+# Data
+DATA/
