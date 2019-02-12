@@ -32,7 +32,7 @@ import random
 import torchvision.transforms as tt
 from fastai.conv_learner import *
 
-from DATA.ARLab.arlab_dataloader import PartDataset
+from dataloader import PartDataset
 from pointnet import PointNetDenseCls2
 
 #==============================================================================
@@ -64,36 +64,61 @@ torch.manual_seed(opt.manualSeed)
 # Main function
 #==============================================================================
 def main(argv=None):
-    print('Hello! This is XXXXXX Program')
+    print('Hello! This is PointNet Segmentation Program')
 
+    '''
+    Define data-loader
+    '''
     trn_ds = PartDataset(root=opt.directory, npoints=opt.num_points, classification=False, class_choice=['Airplane'])
     val_ds = PartDataset(root=opt.directory, npoints=opt.num_points, classification=False, class_choice=['Airplane'], train=False)
     num_classes = trn_ds.num_seg_classes
-
     trn_dl = DataLoader(dataset=trn_ds, batch_size=opt.batch_size, shuffle=True, num_workers=0, pin_memory=True)
     val_dl = DataLoader(dataset=val_ds, batch_size=opt.batch_size, shuffle=False, num_workers=0, pin_memory=True)
     tes_dl = None
 
-    model_data = ModelData(opt.directory, trn_dl, val_dl)
+    model_data = ModelData(path=opt.directory, trn_dl=trn_dl, val_dl=val_dl, test_dl=None)
 
+    '''
+    Define model, learner
+    '''
     model = PointNetDenseCls2(num_points=opt.num_points, k=num_classes)
 
     optimizer = optim.Adam
     criterion = F.cross_entropy
     learner = Learner(model_data, BasicModel(to_gpu(model)), opt_fn=optimizer, crit=criterion)
 
+    '''
+    Find the suitable learning rate
+    '''
+    # lrf = learner.lr_find()
+    # learner.sched.plot() # depends on this learning curve, we can select the suitable learning rate
+
+    '''
+    Train the model
+    '''
     lr = 5e-3
-    learner.fit(lrs=lr, n_cycle=2, cycle_len=3)
+    learner.fit(lrs=lr, n_cycle=3, cycle_len=1, cycle_mult=2)
     learner.save('gross_trained')
+    learner.sched.plot_lr() # plot the trained learning curve
 
-    lrs = np.array([lr / 100, lr / 10, lr])
-    learner.fit(lrs=lrs / 10, n_cycle=2, cycle_len=10)
-    learner.save('finetune_trained')
+    # lrs = np.array([lr/9, lr/3, lr])
+    # learner.fit(lrs=lrs, n_cycle=3, cycle_len=1, cycle_mult=2)
 
-    # preds, targs = learn.TTA()
-    y = learner.predict()
-    x, _ = next(iter(model_data.val_dl))
-
+    '''
+    Test 
+    '''
+    accs = []
+    for i, data in enumerate(val_dl, 0):
+        bx, by = data
+        pred_logs = learner.predict_array(arr=bx)  # is_test=False -> test on validation dataset; is_test=True -> test on test dataset
+        pred_labels = np.argmax(pred_logs, axis=1)
+        pred_probs = np.exp(pred_logs)  # measure probability values
+        acc = accuracy_np(pred_probs, to_np(by))  # evaluate accuracy(only available on valid dataset)
+        # metrics.log_loss(by, pred_probs) # evaluate error(only available on valid dataset)
+        # accuracy = np.sum(to_np(by)[:, :100]==pred_labels[:, :100]) / (pred_labels[:, :100].shape[0] * pred_labels[:, :100].shape[1])
+        accs.append(acc)
+    average_accuracy = np.mean(accs)
+    print("Average accuracy: ", average_accuracy)
 
 if __name__ == '__main__':
     main()
