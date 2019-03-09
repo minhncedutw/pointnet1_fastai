@@ -101,8 +101,9 @@ def main(argv=None):
     learner.save('gross_trained')
     learner.sched.plot_lr() # plot the trained learning curve
 
-    # lrs = np.array([lr/9, lr/3, lr])
-    # learner.fit(lrs=lrs, n_cycle=3, cycle_len=1, cycle_mult=2)
+    print("Number of groups: ", len(learner.models.get_layer_groups()))
+    lrs = np.array([lr/10, lr, lr, lr, lr, lr, lr, lr]) # Length of lrs must be equal to number of groups
+    learner.fit(lrs=lrs, n_cycle=3, cycle_len=1, cycle_mult=2)
 
     '''
     Test 
